@@ -9,7 +9,7 @@ def s_core_define(env, name, value):
 	value: SObject
 	"""
 	env.bind_to_root(str(name), value)
-	return types.SResult(env, types.SNilObject.instance())
+	return types.SResult(env, value)
 
 
 def s_core_set(env, name, value):
@@ -22,7 +22,17 @@ def s_core_set(env, name, value):
 		env.parent.bind(str(name), value)
 	else:
 		env.bind(str(name), value)
-	return types.SResult(env, types.SNilObject.instance())
+	return types.SResult(env, value)
+
+
+def s_core_set_parent(env, name, value):
+	if env.parent and env.parent.parent:
+		env.parent.parent.bind(str(name), value)
+	elif env.parent:
+		env.parent.bind(str(name), value)
+	else:
+		env.bind(str(name), value)
+	return types.SResult(env, value)
 
 
 def s_core_expand_macro(env, macro, params):
@@ -156,7 +166,7 @@ def s_core_print_locals(env):
 	"""
 	print the current name=>value map in env
 	"""
-	print env.current
+	print env.parent.current
 	return types.SResult(env, types.SNilObject.instance())
 
 
@@ -251,12 +261,22 @@ def s_core_if(env, pred, *items):
 
 
 def s_print_env(env):
-	print env
+	print env.parent
 	return types.SResult(env, types.SNilObject.instance())
 
 
 def s_core_realize(env, value):
 	return value.realize(env)
+
+
+def s_core_down_env(env):
+	env = env.down()
+	return types.SResult(env, types.SNilObject.instance())
+
+
+def s_core_up_env(env):
+	env = env.up()
+	return types.SResult(env, types.SNilObject.instance())
 
 
 def s_core_less(env, *items):
@@ -269,59 +289,98 @@ def s_core_less(env, *items):
 				return types.SResult(env, types.SBoolean(False))
 		return types.SResult(env, types.SBoolean(True))
 
-quote_reader_macro = types.SNativeFunc(['value'], s_core_id)
+
+def s_core_hashmap_from_list(env, key_list, value_list):
+	"""
+	scheme 的hashmap暂时用list(key_list, value_list)的形式表示。
+	将来打算再写一个SHashMap的类做这个功能
+	"""
+	l = [key_list, value_list]
+	return types.SResult(env, l)
+
+
+def s_core_hashmap_get(env, hashmap, *key_ret_val):
+	"""
+	if *key is more than 1, than first is key, second is the return value if not found
+	"""
+	k_len = len(key_ret_val)
+	if k_len < 1:
+		raise Exception('hashmap get needs key as second parameter, optional not found return value as third parameter')
+	elif k_len == 1:
+		key = key_ret_val[0]
+		ret_value = types.SNilObject.instance()
+	else:
+		key = key_ret_val[0]
+		ret_value = key_ret_val[1]
+	if len(hashmap) < 2:
+		raise Exception('The first parameter is not a hash map')
+	values_count = len(hashmap[1])
+	for i in range(len(hashmap[0])):
+		k = hashmap[0][i]
+		if values_count <= i:
+			return types.SResult(env, ret_value)
+		if k.equal(key):
+			return types.SResult(env, hashmap[1][i])
+	return types.SResult(env, ret_value)
+
+quote_reader_macro = types.SNativeFunc(['value'], s_core_id, 'quote')
 quote_reader_macro.is_reader_macro = True
 
-do_reader_macro = types.SNativeFunc(['*items'], s_core_do)
+do_reader_macro = types.SNativeFunc(['*items'], s_core_do, 'do')
 do_reader_macro.is_reader_macro = True
 
-core_macro = types.SNativeFunc(['params', 'body'], s_core_macro)
+core_macro = types.SNativeFunc(['params', 'body'], s_core_macro, 'core-macro')
 core_macro.is_reader_macro = True
 
-sym_str_reader = types.SNativeFunc(['value'], s_core_str_sym)
+sym_str_reader = types.SNativeFunc(['value'], s_core_str_sym, 'sym->str')
 sym_str_reader.is_reader_macro = True
 
-core_lambda = types.SNativeFunc(['params', 'body'], s_core_lambda)
+core_lambda = types.SNativeFunc(['params', 'body'], s_core_lambda, 'core-lambda')
 # core_lambda.is_reader_macro = True
 
-str_reader_macro = types.SNativeFunc(['name'], s_core_str)
+str_reader_macro = types.SNativeFunc(['name'], s_core_str, 'str')
 # str_reader_macro.is_reader_macro = True
 
-if_reader = types.SNativeFunc(['pred', '*bodys'], s_core_if)
+if_reader = types.SNativeFunc(['pred', '*bodys'], s_core_if, 'if')
 if_reader.is_reader_macro = True
 
 native_fns = {
-"core-define": types.SNativeFunc(['name', 'value'], s_core_define),
-"core-set": types.SNativeFunc(['name', 'value'], s_core_set),
-"type": types.SNativeFunc(['value'], s_core_type),
-"display": types.SNativeFunc(['*values'], s_display),
+"core-define": types.SNativeFunc(['name', 'value'], s_core_define, 'core-define'),
+"core-set": types.SNativeFunc(['name', 'value'], s_core_set, 'core-set'),
+"core-set-parent": types.SNativeFunc(['name', 'value'], s_core_set_parent, 'core-set-parent'),
+"type": types.SNativeFunc(['value'], s_core_type, 'type'),
+"display": types.SNativeFunc(['*values'], s_display, 'display'),
 "core-macro": core_macro,
 "core-lambda": core_lambda,
-"core-expand-macro": types.SNativeFunc(['*params'], s_core_expand_macro),
-"cons": types.SNativeFunc(['head', 'tail'], s_cons),
-"cons2": types.SNativeFunc(['item', 'list'], s_cons2),
-"list": types.SNativeFunc(['*items'], s_list),
-"count": types.SNativeFunc(['seq'], s_list_len),
-"nth": types.SNativeFunc(['seq', 'index'], s_list_nth),
-"+": types.SNativeFunc(['*items'], s_add),
-"-": types.SNativeFunc(['*items'], s_minus),
-"=": types.SNativeFunc(['*items'], s_equal),
-"<": types.SNativeFunc(['*items'], s_core_less),
+"core-expand-macro": types.SNativeFunc(['*params'], s_core_expand_macro, 'core-expand-macro'),
+"cons": types.SNativeFunc(['head', 'tail'], s_cons, 'cons'),
+"cons2": types.SNativeFunc(['item', 'list'], s_cons2, 'cons2'),
+"list": types.SNativeFunc(['*items'], s_list, 'list'),
+"count": types.SNativeFunc(['seq'], s_list_len, 'count'),
+"hashmap": types.SNativeFunc(['key_list', 'value_list'], s_core_hashmap_from_list, 'hashmap'),
+"hashmap-get": types.SNativeFunc(['hashmap', 'key', 'optional-ret-value'], s_core_hashmap_get, 'hashmap-get'),
+"nth": types.SNativeFunc(['seq', 'index'], s_list_nth, 'nth'),
+"+": types.SNativeFunc(['*items'], s_add, '+'),
+"-": types.SNativeFunc(['*items'], s_minus, '-'),
+"=": types.SNativeFunc(['*items'], s_equal, '='),
+"<": types.SNativeFunc(['*items'], s_core_less, '<'),
 "do": do_reader_macro,
 "str": str_reader_macro,
 "sym->str": sym_str_reader,
-"symbol": types.SNativeFunc(['name'], s_core_symbol),
+"symbol": types.SNativeFunc(['name'], s_core_symbol, 'symbol'),
 "quote": quote_reader_macro,
-"id": types.SNativeFunc(['value'], s_core_id),
-"retrieve": types.SNativeFunc(['value'], s_core_retrieve),
-"print-locals": types.SNativeFunc([], s_core_print_locals),
-"print-env": types.SNativeFunc([], s_print_env),
-"newline": types.SNativeFunc([], s_newline),
-"map": types.SNativeFunc(['fn', 'items'], s_core_map),
-"exit": types.SNativeFunc(['number'], s_core_exit),
-"realize": types.SNativeFunc(['value'], s_core_realize),
+"id": types.SNativeFunc(['value'], s_core_id, 'id'),
+"retrieve": types.SNativeFunc(['value'], s_core_retrieve, 'retrieve'),
+"print-locals": types.SNativeFunc([], s_core_print_locals, 'print-locals'),
+"print-env": types.SNativeFunc([], s_print_env, 'print-env'),
+"newline": types.SNativeFunc([], s_newline, 'newline'),
+"map": types.SNativeFunc(['fn', 'items'], s_core_map, 'map'),
+"exit": types.SNativeFunc(['number'], s_core_exit, 'exit'),
+"realize": types.SNativeFunc(['value'], s_core_realize, 'realize'),
 "if": if_reader,
-"call/cc": types.SNativeFunc(['ret'], s_core_call_cc),
-"and": types.SNativeFunc(['*items'], s_core_and),
-"or": types.SNativeFunc(['*items'], s_core_or)
+"call/cc": types.SNativeFunc(['ret'], s_core_call_cc, 'call/cc'),
+"and": types.SNativeFunc(['*items'], s_core_and, 'and'),
+"or": types.SNativeFunc(['*items'], s_core_or, 'or'),
+"down-env": types.SNativeFunc([], s_core_down_env, 'down-env'),  # when call down-env or up-env in scheme code, error happens
+"up-env": types.SNativeFunc([], s_core_up_env, 'up-env')
 }

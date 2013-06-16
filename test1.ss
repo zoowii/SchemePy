@@ -1,4 +1,4 @@
-﻿; (core-define "a" 123)
+; (core-define "a" 123)
 ; 222
 ;(display a)
 ;(display (cons "a" "b"))
@@ -50,3 +50,8 @@
 ; (display b)
 ; (newline)
 ; '(a b "jfiej" '(1 2))
+
+(println "hashmap test")
+(define m1 (hashmap (list "a" "b" "c") (list "hello" list 123)))
+(println m1)
+(do (print (hashmap-get m1 "a")) (print (hashmap-get m1 "c")) (println (hashmap-get m1 "d" "not found return value")))

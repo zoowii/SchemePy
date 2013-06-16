@@ -35,6 +35,9 @@ class SObject(object):
 	def equal(self, other):
 		return type(self) == type(other) and self.value == other.value
 
+	def expand_macro(self, env):
+		return SResult(env, self)
+
 
 class SBaseValue(SObject):
 	value = None
@@ -137,6 +140,16 @@ class SList(SObject):
 	def __init__(self):
 		self.items = []
 
+	def to_str(self):
+		str = '('
+		for i in range(len(self)):
+			item = self[i]
+			if i > 0:
+				str += ' '
+			str += item.to_str()
+		str += ')'
+		return str
+
 	def add(self, item):
 		self.items.append(item)
 
@@ -182,10 +195,38 @@ class SList(SObject):
 	def typename(self):
 		return 'list'
 
+	def expand_macro(self, env):
+		macros = env.get_all_macros()
+		if len(self) == 0:
+			return SResult(env, self)
+		else:
+			# TODO
+			first_result = self[0].realize(env)
+			first = first_result.ret
+			env = first_result.env
+			if isinstance(first, SMacro):
+				params = self[1:]
+				result = first.expand(env, params)
+				return result.ret.expand_macro(result.env)
+			else:
+				for i in range(len(self)):
+					item = self[i]
+					result = item.expand_macro(env)
+					env = result.env
+					self.items[i] = result.ret
+				return SResult(env, self)
+
 
 class SExprList(SObject):
 	def __init__(self):
 		self.items = []
+
+	def to_str(self):
+		str = ''
+		for item in self:
+			str += item.to_str()
+			str += '\n'
+		return str
 
 	def add(self, item):
 		self.items.append(item)
@@ -221,11 +262,21 @@ class SExprList(SObject):
 	def typename(self):
 		return 'reprlist'
 
+	def expand_macro(self, env):
+		cur_env = env
+		for i in range(len(self)):
+			item = self[i]
+			expanded = item.expand_macro(cur_env)
+			cur_env = expanded.env
+			self.items[i] = expanded.ret
+		return SResult(cur_env, self)
+
 
 class SCallable(SObject):
-	def __init__(self, params, body):
+	def __init__(self, params, body, name=''):
 		self.params = params
 		self.body = body
+		self.name = name
 
 	def do_apply(self, env, params):
 		return self.apply(env, params)
@@ -292,14 +343,20 @@ class SFunc(SCallable):
 		return result
 
 	def __repr__(self):
-		str = "<proc(" + repr(self.params) + ")>:\n"
+		str = "<%s(" % self.typename + repr(self.params) + ")>:\n"
 		str += repr(self.body)
-		str += '\n</proc>'
+		str += '\n</%s>' % self.typename
 		return str
 
 	@property
 	def typename(self):
 		return 'fn'
+
+	def to_str(self):
+		str = "<%s(" % self.typename + repr(self.params) + ")>:\n"
+		str += self.body.to_str()
+		str += '\n</%s>' % self.typename
+		return str
 
 
 class SMacro(SFunc):
@@ -321,6 +378,12 @@ class SMacro(SFunc):
 	def typename(self):
 		return 'macro'
 
+	def expand_macro(self, env):
+		result = self.body.expand_macro(env)
+		self.body = result.ret
+		env = result.env
+		return SResult(env, self)
+
 
 class SNativeFunc(SFunc):
 	def apply(self, env, params):
@@ -332,4 +395,7 @@ class SNativeFunc(SFunc):
 	@property
 	def typename(self):
 		return 'native_fn'
+
+	def to_str(self):
+		return self.name
 

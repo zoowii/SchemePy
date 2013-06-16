@@ -86,12 +86,22 @@ class SEnvItem(object):
 
 
 class SEnv(object):
-	current = {}
 	parent = None
 	continuation = None
 
 	def __init__(self):
-		pass
+		self.current = {}
+
+	def get_all_macros(self):
+		result = {}
+		for k in self.current.keys():
+			v = self.current[k]
+			if isinstance(v, types.SMacro):
+				result[k] = v
+		if not self.parent:
+			return result
+		else:
+			return result.update(self.parent.get_all_macros())
 
 	def find_in_current(self, name):
 		if name in self.current:
@@ -223,5 +233,22 @@ def startup(core_ss_filepath):
 
 def run_code_with_env(env, text):
 	parsed_code = parser.run_yacc(text)
+	expanded = parsed_code.expand_macro(env)
+	print 'expanded:', expanded.ret
+	env = expanded.env
 	result = parsed_code.realize(env)
 	return result
+
+
+def expand_macros_from_text(env, text):
+	parsed_code = parser.run_yacc(text)
+	expanded_exprlist = expand_macros(env, parsed_code)
+	return expanded_exprlist
+
+
+def expand_macros(env, exprlist):
+	"""
+	TODO: expand all macros in exprlist using macros in env and exprlist
+	"""
+	expanded = exprlist.expand_macro(env)
+	return expanded.ret
