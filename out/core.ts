@@ -496,8 +496,8 @@ class SFunc extends SCallable {
 		}
 		var count = this.params.length;
 		if (count != params.length) {
-			println(this.params, params)
-			throw new Error(count + " params needed, while " + params.length + " params given");
+			error(this.params, params);
+			throw new Error("fn " + this.name + " " + count + " params needed, while " + params.length + " params given");
 		}
 		for (var i = 0; i < count; ++i) {
 			var name = this.params[i];
@@ -1111,15 +1111,20 @@ var coreDefinitions = {
 		}, 'hashmap-get'),
 		"context": SObject.create(context),
 		"js-get-property": new SNativeFunc(['js_obj', 'property_name'], function(env, js_obj, property_name) {
-			var property = js_obj.getValue()[property_name];
+			var property = js_obj.toNative()[property_name];
 			if(property === undefined || property === null) {
 				return SNilObject.instance();
 			} else {
 				return SObject.create(property);
 			}
 		}, 'js-get-property'),
+		"js-set-property": new SNativeFunc(['js_obj', 'key', 'value'], function(env, js_obj, key, value) {
+			var obj = js_obj.toNative();
+			obj[key.toNative()] = value.toNative();
+			return new SResult(env, js_obj);
+		}),
 		"js-call-function": new SNativeFunc(['js_obj', 'js_function_name', 'params'], function (env, js_obj, js_function_name, params) {
-			var js_obj = js_obj.getValue();
+			var js_obj = js_obj.toNative();
 			var func = js_obj[js_function_name];
 			var param_values = [];
 			for (var i = 0; i < params.size(); ++i) {
@@ -1133,7 +1138,31 @@ var coreDefinitions = {
 				result = SObject.create(result);
 			}
 			return new SResult(env, result);
-		}, 'js-call-function')
+		}, 'js-call-function'),
+		"display-js-obj": new SNativeFunc(['*objs'], function(env) {
+			var s = '';
+			for(var i=1;i<arguments.length;++i) {
+				if(i>1) {
+					s += ' ';
+				}
+				s += JSON.stringify(arguments[i].toNative());
+			}
+			print(s);
+			return new SResult(env, SNilObject.instance());
+		}, 'display-js-obj'),
+		"make-js-function": new SNativeFunc(['proc'], function(env, proc) {
+			return new SResult(env,SObject.create(function() {
+				var l = new SList();
+				l.add(proc);
+				for(var i=0;i<arguments.length;++i) {
+					l.add(SObject.create(arguments[i]));
+				}
+				return l.realize(env); // TODO: how to get the env when callback
+			}));
+		}, "make-js-function"),
+		"js-create-object": new SNativeFunc([], function(env) {
+			return new SResult(env, SObject.create({}));
+		})
 	}
 };
 

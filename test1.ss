@@ -57,6 +57,25 @@
 (do (print (hashmap-get m1 "a")) (print (hashmap-get m1 "c")) (println (hashmap-get m1 "d" "not found return value")))
 (println "世界
 你好")
-(define http (js-call-function context "getModule" (list "http")))
-(println http)
-(js-call-function context "sayHi" (list))
+; (defmacro println-js-obj (obj)
+;     (do (display-js-obj obj) (newline)))
+(define http (js-call-function context "getModule" (list "http")))  ; This only run on node.js, because it use http module
+(display-js-obj http)(newline)
+(js-call-function context "sayHi" (list))(newline)
+(define plain-http-head (js-create-object))
+(js-set-property plain-http-head "Content-Type" "text/html")
+(defn create-http-server (handler)
+    (do
+    (core-set "server" (js-call-function http "createServer" (list (make-js-function handler))))
+    server
+    ))
+(define http-handler
+    (lambda (req res)
+        (do
+            (js-call-function res "writeHead" (list 200 plain-http-head))
+            (js-call-function res "end" (list"Hello, World!<h1>SchemePy</h1><h3>Written by SchemePy(compiled to javascript and running on Node.)</h3><h3>Author: zoowii</h3><h3><a href='https://github.com/zoowii/SchemePy'>Github</a></h3>")))))
+(display-js-obj (make-js-function http-handler))(newline)
+(display-js-obj plain-http-head)(newline)
+(define server (create-http-server http-handler))
+(display-js-obj server)(newline)
+(js-call-function server "listen" (list 5000 "127.0.0.1"))

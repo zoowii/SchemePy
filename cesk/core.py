@@ -334,12 +334,13 @@ class CeskMachine(object):
 		}
 		};
 		}
-		function require(path) {
-			return exports;
+		var ss_require = function (path) {
+			if(path==='./core') { return exports; }
+			else { return require(path); }
 		}
 		%s
 	var context = this;
-	var core = require('./core');
+	var core = ss_require('./core');
 	var code = """ % core_js_code
 		after_code = """;
 		core.CeskMachine.startRunExprList(code);

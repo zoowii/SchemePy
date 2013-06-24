@@ -25,12 +25,12 @@ continuation设计失误，开始想好了，结果因为实现时写着写着�
 
 TODO：第4步和第7步可以作为两条支线分别执行
 1. 将scheme代码进行宏展开成核心scheme元素构成的代码并确保可以解释执行展开后的代码，过程中的宏要保持下来，不要扔掉. DONE. at 2013/6/14
-2. 完善scheme的基础元素，主要包括列表、hash-map. DONE. at 2013/6/14. 具有list, count(计算List大小), nth, hashmap, hashmap-get等内置函数和类型
+2. 完善scheme的基础元素，主要包括列表、hash-map. DONE. at 2013/6/14. 具有list, count(计算List大小), nth, hashmap, hashmap-get等内置函数和类型. DONE. at 2013/6/24
 3. scheme的函数重载功能，对应的Env的存储形式要略作修改
 4. 将PHP代码语法解析成LISP形式
 5. 对照PHP解析出的LISP形式编写scheme宏
 6. 实现解释执行PHP解析出的LISP形式
-7. 将核心scheme元素组成的scheme代码编译成Java代码/java字节码/JavaScript
+7. 将核心scheme元素组成的scheme代码编译成Java代码/java字节码/JavaScript. PARTIAL DONE. at 2013/6/24. Compile to JS
 
 ====
 2013/6/14
@@ -49,4 +49,9 @@ demo中展开后的代码放在macro_expanded_code.tmp文件中。因为函数�
 今天已经完成了将Scheme代码编译到单独一个js文件，并且保留所有特性，包括宏、continuation、lambda等等，可以在node.js和浏览器中运行，可以与JavaScript互相调用，不过在浏览器中运行时，因为console.log最后会换行，所以编译出的程序每次输出也会多一个换行符。
 虽然没有做过测试，但相比性能也不会好到哪去。要改变这个状况，估计要将目前continuation记录整个接下来下执行程序的列表的方式改变，改成对图灵机的模拟，用PC计数代表，或者去掉continuation特性，
 编译成传统命令式风格的代码。后一种方案虽然动态性弱一些，但性能应该会有大幅提高。有空我会去看看其他人的一些实现，目前我的编译原理和scheme的学习基本都是自己摸索着做的，没有系统学习过，也许现在看看别人的实现会更有好处。
-下一步就是真正实现编译到C/C++/Golang，以及将PHP代码用LISP宏展开语法并实现运行。
+下一步就是真正实现编译到C/C++/Golang，以及将PHP代码用LISP宏展开语法并实现运行，以及编译时优化（尾递归优化、内联优化等）。
+目前发现宏功能似乎有点BUG，有时会失效（效果与预期不同），或者是我设计的用法不方便。
+demo(test1.ss)中有函数、宏、与JS的互调、利用NODE的HTTP模块简历web server等等。
+编译参数的JS代码依赖的运行库使用TypeScript写成编译成JavaScript并嵌入最终生成文件中。
+在项目目录下运行rake(ruby 的Rake)可以编译例子以及用nodejs运行产生的代码(out/test1.ss.js)，运行后的效果是建立一个web服务器（5000端口）
+

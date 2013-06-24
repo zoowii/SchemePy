@@ -70,7 +70,7 @@ class SNilObject(SBaseValue):
 		return 'nil'
 
 	def compile_to_js(self, env):
-		return 'nil'  # or core.SNilObject.instance()
+		return 'core.SNilObject.instance()'
 
 
 class SNumber(SBaseValue):
