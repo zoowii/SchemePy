@@ -38,6 +38,9 @@ class SObject(object):
 	def expand_macro(self, env):
 		return SResult(env, self)
 
+	def compile_to_js(self, env):
+		return self.to_str()
+
 
 class SBaseValue(SObject):
 	value = None
@@ -66,6 +69,9 @@ class SNilObject(SBaseValue):
 	def typename(self):
 		return 'nil'
 
+	def compile_to_js(self, env):
+		return 'nil'  # or core.SNilObject.instance()
+
 
 class SNumber(SBaseValue):
 	def __init__(self, number):
@@ -77,6 +83,9 @@ class SNumber(SBaseValue):
 	@property
 	def typename(self):
 		return 'number'
+
+	def compile_to_js(self, env):
+		return "core.SNumber.create(%d)" % self.value
 
 
 class SBoolean(SBaseValue):
@@ -93,6 +102,9 @@ class SBoolean(SBaseValue):
 	def typename(self):
 		return 'boolean'
 
+	def compile_to_js(self, env):
+		return "core.SBoolean.create(%s)" % self.value
+
 
 class SString(SBaseValue):
 	def __init__(self, value):
@@ -108,6 +120,12 @@ class SString(SBaseValue):
 	@property
 	def typename(self):
 		return "string"
+
+	def to_str(self):
+		return '"%s"' % self.value.replace('\n', '\\n').replace('\t', '\\t')
+
+	def compile_to_js(self, env):
+		return "core.SString.create(%s)" % self.to_str()
 
 
 class SIdentifier(SObject):
@@ -134,6 +152,9 @@ class SIdentifier(SObject):
 	@property
 	def typename(self):
 		return 'symbol'
+
+	def compile_to_js(self, env):
+		return "core.SIdentifier.create(\"%s\")" % self.to_str()
 
 
 class SList(SObject):
@@ -216,10 +237,26 @@ class SList(SObject):
 					self.items[i] = result.ret
 				return SResult(env, self)
 
+	def compile_to_js(self, env):
+		s = 'core.SList.create('
+		for i in range(len(self)):
+			if i > 0:
+				s += ','
+			s += self[i].compile_to_js(env)
+		s += ')'
+		return s
+
 
 class SExprList(SObject):
 	def __init__(self):
 		self.items = []
+
+	@staticmethod
+	def merge(*exprLists):
+		l = SExprList()
+		for exprList in exprLists:
+			l.items.extend(exprList.items)
+		return l
 
 	def to_str(self):
 		str = ''
@@ -271,12 +308,33 @@ class SExprList(SObject):
 			self.items[i] = expanded.ret
 		return SResult(cur_env, self)
 
+	def compile_to_js(self, env):
+		s = 'core.SExprList.create('
+		for i in range(len(self)):
+			if i > 0:
+				s += ','
+			s += self[i].compile_to_js(env)
+		s += ')'
+		return s
+
 
 class SCallable(SObject):
 	def __init__(self, params, body, name=''):
 		self.params = params
 		self.body = body
 		self.name = name
+
+	def match(self, param_values):
+		params_len = len(self.params)
+		if params_len != len(param_values):
+			return False
+		for i in range(params_len):
+			param = self.params[i]
+			v = param_values[i]
+			#  TODO: now this func doesn't work because all params in SCallable are SString type
+			if not isinstance(param, SIdentifier) and not param.equal(v):
+				return False
+		return True
 
 	def do_apply(self, env, params):
 		return self.apply(env, params)
@@ -358,6 +416,19 @@ class SFunc(SCallable):
 		str += '\n</%s>' % self.typename
 		return str
 
+	def compile_to_js(self, env):
+		s = "core.SFunc.create(["
+		for i in range(len(self.params)):
+			if i > 0:
+				s += ','
+			s += self.params[i].compile_to_js(env)
+		s += '],'
+		s += self.body.compile_to_js(env)
+		s += ',"'
+		s += self.name
+		s += '")'
+		return s
+
 
 class SMacro(SFunc):
 	def do_apply(self, env, params):
@@ -384,6 +455,19 @@ class SMacro(SFunc):
 		env = result.env
 		return SResult(env, self)
 
+	def compile_to_js(self, env):
+		s = "core.SMacro.create(["
+		for i in range(len(self.params)):
+			if i > 0:
+				s += ','
+			s += self.params[i].compile_to_js(env)
+		s += '],'
+		s += self.body.compile_to_js(env)
+		s += ',"'
+		s += self.name
+		s += '")'
+		return s
+
 
 class SNativeFunc(SFunc):
 	def apply(self, env, params):
@@ -399,3 +483,5 @@ class SNativeFunc(SFunc):
 	def to_str(self):
 		return self.name
 
+	def compile_to_js(self, env):
+		return self.name

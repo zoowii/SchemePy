@@ -1,7 +1,7 @@
 # coding: UTF-8
 
 tokens = (
-'IDENTIFIER', 'STRING', 'BOOLEAN', 'LEFT_PARENTHESES', 'RIGHT_PARENTHESES', 'NUMBER', 'SPACE', 'QUOTE', 'NEWLINE',
+'IDENTIFIER', 'MULTILINE_STRING', 'STRING', 'BOOLEAN', 'LEFT_PARENTHESES', 'RIGHT_PARENTHESES', 'NUMBER', 'SPACE', 'QUOTE', 'NEWLINE',
 'COMMENT'
 )
 
@@ -9,6 +9,12 @@ t_LEFT_PARENTHESES = r'\('
 t_RIGHT_PARENTHESES = r'\)'
 
 import cesk.types as types
+
+
+def t_MULTILINE_STRING(t):
+	r'\"\"\"[\w\W]*?\"\"\"'
+	t.value = types.SString(t.value[2:-2])
+	return t
 
 
 def t_STRING(t):

@@ -103,35 +103,88 @@ class SEnv(object):
 		else:
 			return result.update(self.parent.get_all_macros())
 
-	def find_in_current(self, name):
+	def find_all_callable_in_current(self, name):
 		if name in self.current:
-			# TODO: function override, if there are some versions with different params of same-name-function, return last
-			# Important: don't change the lists, just replace them
+			l = self.current[name]
+			result = [i for i in l if isinstance(i, types.SCallable)]
+			if len(result) == 0:
+				return False
+			else:
+				return result
+		else:
+			return False
+
+	def find_callable_in_current(self, name):
+		"""
+		find the callable value of name in current level of env, return the last callable value of the overrides
+		"""
+		l = self.find_all_callable_in_current(name)
+		if l:
+			return l[-1]
+		else:
+			return False
+
+	def find_all_in_current(self, name):
+		"""
+		find all overrides in current level of env
+		"""
+		if name in self.current:
 			return self.current[name]
 		else:
 			return False
 
-	def find(self, name):
+	def find_in_current(self, name):
+		"""
+		find value of name in current level of env, return the first value of the overrides
+		"""
+		vals = self.find_all_in_current(name)
+		if vals:
+			return vals[0]
+		else:
+			return False
+
+	def find(self, name, is_callable=False):
 		if name in self.current:
-			return self.find_in_current(name)
+			if is_callable:
+				return self.find_callable_in_current(name)
+			else:
+				return self.find_in_current(name)
 		elif self.parent is not None:
 			return self.parent.find(name)
 		else:
 			return False
 
+	def find_callable(self, name, params):
+		l = self.find_all_callable_in_current(name)
+		if l:
+			return l[-1]  # TODO
+		elif self.parent is not None:
+			return self.parent.find_callable(name, params)
+		else:
+			return False
+
 	def bind(self, name, value):
-		# TODO: if it's function override, put the same-name functions to a list/exist list, and append the new one to the last
-		self.current[name] = value
+		# bind to current
+		# if it's function override, put the same-name functions to a list/exist list, and append the new one to the last
+		if self.current.has_key(name):
+			now_val = self.current[name]
+			if isinstance(value, types.SCallable):
+				now_val.append(value)
+			else:
+				now_val.insert(0, value)
+			self.current[name] = now_val
+		else:
+			self.current[name] = [value]
 
 	def bind_to_exist(self, name, value):
 		"""
 		if name is in env, use value to replace the position of the old value of name
 		"""
 		if self.find(name):
-			if self.find_in_current(name):
-				self.current[name] = value  # TODO: refer to the doc in self.find
+			if self.find_all_in_current(name):
+				return self.bind(name, value)
 			else:
-				self.parent.bind_to_exist(name, value)
+				return self.parent.bind_to_exist(name, value)
 		else:
 			return False
 
@@ -222,33 +275,111 @@ def start_run_exprlist(exprlist):
 from util import parser
 
 
-def startup(core_ss_filepath):
-	f = open(core_ss_filepath)
-	text = f.read()
-	f.close()
-	parsed_code = parser.run_yacc(text)
-	result = start_run_exprlist(parsed_code)
-	return result
+class CeskMachine(object):
+	@staticmethod
+	def startup(core_ss_filepath):
+		f = open(core_ss_filepath)
+		text = f.read()
+		f.close()
+		parsed_code = parser.run_yacc(text)
+		result = start_run_exprlist(parsed_code)
+		return result
 
+	@staticmethod
+	def run_code_with_env(env, text):
+		parsed_code = parser.run_yacc(text)
+		expanded = parsed_code.expand_macro(env)
+		print 'expanded:', expanded.ret
+		env = expanded.env
+		result = parsed_code.realize(env)
+		return result
 
-def run_code_with_env(env, text):
-	parsed_code = parser.run_yacc(text)
-	expanded = parsed_code.expand_macro(env)
-	print 'expanded:', expanded.ret
-	env = expanded.env
-	result = parsed_code.realize(env)
-	return result
+	@staticmethod
+	def expand_macros_from_text(env, text):
+		parsed_code = parser.run_yacc(text)
+		expanded_exprlist = CeskMachine.expand_macros(env, parsed_code)
+		return expanded_exprlist
 
+	@staticmethod
+	def expand_macros(env, exprlist):
+		"""
+		TODO: expand all macros in exprlist using macros in env and exprlist
+		"""
+		expanded = exprlist.expand_macro(env)
+		return expanded.ret
 
-def expand_macros_from_text(env, text):
-	parsed_code = parser.run_yacc(text)
-	expanded_exprlist = expand_macros(env, parsed_code)
-	return expanded_exprlist
+	@staticmethod
+	def compile_to_js(env, exprlist):
+		import os
+		core_js_filepath = os.path.join(os.environ.get('project_dir'), 'out/core.js')
+		def readfile(filepath):
+			f = open(filepath)
+			data = f.read()
+			f.close()
+			return data
+		core_js_code = readfile(core_js_filepath)
+		before_code = """
+		(function () {
+		var exports = {};
+		if(!this.process) {
+		this.process = {
+		stdout: {write: function() {
+		var s = ''; for(var i=0;i<arguments.length;++i) {var item = arguments[i]; var toWrite = 'undefined'; if(item !== undefined) {toWrite=item.toString();} s += toWrite; } console.log(s);
+		}},
+		stderr: {write: function() {
+		var s = ''; for(var i=0;i<arguments.length;++i) {var item = arguments[i]; var toWrite = 'undefined'; if(item !== undefined) {toWrite=item.toString();} s += toWrite; } console.error(s);
+		}},
+		exit: function(num) {
+		console.log('Exit ' + num + '!');
+		}
+		};
+		}
+		function require(path) {
+			return exports;
+		}
+		%s
+	var context = this;
+	var core = require('./core');
+	var code = """ % core_js_code
+		after_code = """;
+		core.CeskMachine.startRunExprList(code);
+		})();
+		"""
+		inner_code = exprlist.compile_to_js(env)
+		code = before_code + inner_code + after_code
+		return code
 
+	@staticmethod
+	def compile_to_js_file(env, exprlists, filepath):
+		f = open(filepath, 'w+')
+		f.write(CeskMachine.compile_to_js(env, apply(types.SExprList.merge, exprlists)))
+		f.close()
 
-def expand_macros(env, exprlist):
-	"""
-	TODO: expand all macros in exprlist using macros in env and exprlist
-	"""
-	expanded = exprlist.expand_macro(env)
-	return expanded.ret
+	@staticmethod
+	def total_compile_to_js_file(filepath):
+		from cesk import config
+		import os
+
+		def readfile(filepath):
+			f = open(filepath)
+			data = f.read()
+			f.close()
+			return data
+
+		def write_to_file(data, filepath):
+			f = open(filepath, 'w+')
+			f.write(data)
+			f.close()
+
+		filename = os.path.basename(filepath)
+		output_filepath = os.path.join(config.compile_out_dir, "%s.%s" % (filename, config.compile_out_extension))
+		project_dir = os.environ.get('project_dir', os.path.dirname(os.path.dirname(__file__)))
+		core_filepath = os.path.join(project_dir, 'core.ss')
+		core_text = readfile(core_filepath)
+		code_text = readfile(filepath)
+		result = CeskMachine.startup(core_filepath)
+		exprlist = CeskMachine.expand_macros_from_text(result.env, code_text)
+		core_exprlist = CeskMachine.expand_macros_from_text(result.env, core_text)
+		CeskMachine.compile_to_js_file(result.env, [core_exprlist, exprlist], output_filepath)
+		return output_filepath
+

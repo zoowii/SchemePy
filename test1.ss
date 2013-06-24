@@ -55,3 +55,8 @@
 (define m1 (hashmap (list "a" "b" "c") (list "hello" list 123)))
 (println m1)
 (do (print (hashmap-get m1 "a")) (print (hashmap-get m1 "c")) (println (hashmap-get m1 "d" "not found return value")))
+(println "世界
+你好")
+(define http (js-call-function context "getModule" (list "http")))
+(println http)
+(js-call-function context "sayHi" (list))

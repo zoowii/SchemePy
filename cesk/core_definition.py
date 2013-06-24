@@ -196,8 +196,7 @@ def s_core_do(env, *items):
 	for item in items:
 		result = item.realize(env)
 		env = result.env
-		ret = result.ret
-		final_ret = ret
+		final_ret = result.ret
 	return types.SResult(env, final_ret)
 
 
@@ -295,7 +294,9 @@ def s_core_hashmap_from_list(env, key_list, value_list):
 	scheme 的hashmap暂时用list(key_list, value_list)的形式表示。
 	将来打算再写一个SHashMap的类做这个功能
 	"""
-	l = [key_list, value_list]
+	l = types.SList()
+	l.add(key_list)
+	l.add(value_list)
 	return types.SResult(env, l)
 
 
